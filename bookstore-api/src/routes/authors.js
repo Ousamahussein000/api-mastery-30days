@@ -1,0 +1,86 @@
+const express = require('express')
+const router = express.Router()
+const { AppError, ErrorCodes } = require('../errors')
+
+let authors = [
+    { id: 1, name: 'David Thomas', nationality: 'British', bio: 'Co-author of The Pragmatic Programmer' },
+    { id: 2, name: 'Robert Martin', nationality: 'American', bio: 'Author of Clean Code and Clean Architecture' },
+    { id: 3, name: 'Kyle Simpson', nationality: 'American', bio: 'Author of the You Don\'t Know JS series' },
+]
+let nextId = 4
+
+
+router.get('/', (req, res) => {
+    let result = [...authors]
+    if (req.query.search) {
+        const searchedAuthor = req.query.search.toLocaleLowerCase()
+        result = result.filter(author => author.name.toLocaleLowerCase().includes(searchedAuthor))
+    }
+    if (req.query.sort) {
+        const order = req.query.sort.startsWith('-') ? '-1' : '1'
+        const authorName = req.query.sort.replace('-', '')
+        result = result.sort((author1, author2) => author1[authorName] > author2[authorName] ? 1 : author1[authorName] > author2[authorName] ? -1 : 0) * order
+    }
+    const page = parseInt(req.query.page) || 1
+    const limit = Math.min(parseInt(req.query.limit) || 10, 100)
+    const skip = (page - 1) * limit
+    const total = result.length
+    result = result.slice(skip, skip + limit)
+    res.json({
+        data: result,
+        pagination: {
+            page,
+            limit,
+            total,
+            total_pages: Math.ceil(total / limit),
+            has_next: page * limit < total,
+            has_prev: page > 1
+        }
+
+    })
+})
+router.get("/:id", (req, res, next) => {
+    const author = authors.find(author => author.id === parseInt(req.params.id))
+    if (!author) {
+        return next(new AppError(404, ErrorCodes.NOT_FOUND, "no author with this id"))
+    }
+    res.status(200).json({ data: author })
+})
+router.post("/", (req, res, next) => {
+    const { id, name, nationality, bio } = req.body
+    const errors = []
+    if (!name) errors.push("write the name")
+    if (!nationality) errors.push("write the nationality")
+    if (!bio) errors.push("write the bio")
+
+    if (errors.length > 0) {
+        return next(new AppError(422, ErrorCodes.VALIDATION_ERROR, "fill in the required fields"))
+    }
+    const author = { id: nextId++, name, nationality, bio }
+    authors.push(author)
+    res.status(201).json({ data: author })
+})
+router.patch("/:id", (req, res, next) => {
+    const author = authors.find(author => author.id === parseInt(req.params.id))
+    if (!author) {
+        return next(new AppError(404, ErrorCodes.NOT_FOUND, "no author with this id"))
+    }
+    const { name, nationality, bio } = req.body
+    if (name) author.name = name
+    if (nationality) author.nationality = nationality
+    if (bio) author.bio = bio
+    res.status(200).json({ data: author })
+})
+router.delete("/:id", (req, res, next) => {
+    const authorIndex = authors.findIndex(author => author.id === parseInt(req.params.id))
+    if (authorIndex === -1) {
+        return next(new AppError(404, ErrorCodes.NOT_FOUND, "no author with this id"))
+    }
+    authors.splice(authorIndex, 1)
+    res.status(204).send()
+})
+
+module.exports = router
+
+
+

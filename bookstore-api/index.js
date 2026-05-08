@@ -2,6 +2,7 @@ const express = require('express')
 const logger = require('./src/middleware/logger')
 const notFound = require('./src/middleware/notFound')
 const booksRouter = require('./src/routes/books')
+const authorsRouter = require('./src/routes/authors')
 const { ErrorCodes } = require('./src/errors')
 
 const app = express()
@@ -12,6 +13,7 @@ app.use(logger)           // log every request
 
 // --- Routes ---
 app.use('/v1/books', booksRouter)
+app.use('/v1/authors', authorsRouter)
 
 // --- 404 handler — must be after all routes ---
 app.get('/', (req, res) => {
