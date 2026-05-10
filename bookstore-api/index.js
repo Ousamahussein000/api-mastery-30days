@@ -3,7 +3,7 @@ const logger = require('./src/middleware/logger')
 const notFound = require('./src/middleware/notFound')
 const booksRouter = require('./src/routes/books')
 const authorsRouter = require('./src/routes/authors')
-const { ErrorCodes } = require('./src/errors')
+const { ErrorCodes, AppError } = require('./src/errors')
 
 const app = express()
 
@@ -27,6 +27,7 @@ app.use(notFound)
 
 // --- Global error handler — must be last ---
 app.use((err, req, res, next) => {
+    console.log('ERROR HANDLER HIT:', err)
     const status = err.status || 500
     const code = err.code || ErrorCodes.INTERNAL_ERROR
     const message = err.status ? err.message : 'An unexpected error occurred'

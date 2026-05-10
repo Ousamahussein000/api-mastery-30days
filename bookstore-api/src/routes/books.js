@@ -1,6 +1,8 @@
 const express = require('express')
 const router = express.Router()
 const { AppError, ErrorCodes } = require('../errors')
+const { validate, validateParams } = require('../middleware/validation')
+const { z } = require('zod')
 
 let books = [
     { id: 1, title: 'The Pragmatic Programmer', author: 'David Thomas', price: 39.99, stock: 10 },
@@ -8,6 +10,18 @@ let books = [
     { id: 3, title: 'You Don\'t Know JS', author: 'Kyle Simpson', price: 24.99, stock: 8 },
 ]
 let nextId = 4;
+
+const CreateBookSchema = z.object({
+    title: z.string().min(1, 'title is required').max(255, 'title must be less than 255 characters'),
+    author: z.string().min(1, 'author is required').max(55, 'author must be less than 55 characters'),
+    price: z.number().min(0, 'price must be a positive number'),
+    stock: z.number().min(0, 'stock must be a non-negative number').optional()
+})
+const UpdateBookSchema = CreateBookSchema.partial()
+
+const IdSchema = z.object({
+    id: z.coerce.number().int().positive()
+})
 
 router.get('/', (req, res) => {
     let result = [...books]
@@ -49,8 +63,8 @@ router.get('/', (req, res) => {
 
 )
 // GET /v1/books/:id
-router.get('/:id', (req, res, next) => {
-    const book = books.find(b => b.id === parseInt(req.params.id))
+router.get('/:id', validateParams(IdSchema), (req, res, next) => {
+    const book = books.find(b => b.id === req.params.id)
     if (!book) {
         return next(new AppError(404, ErrorCodes.NOT_FOUND,
             `Book with id ${req.params.id} not found`))
@@ -59,51 +73,51 @@ router.get('/:id', (req, res, next) => {
 })
 
 // POST /v1/books
-router.post('/', (req, res, next) => {
+router.post('/', validate(CreateBookSchema), (req, res, next) => {
+    console.log(typeof req.body.title, req.body)
     const { title, author, price, stock } = req.body
-    const errors = []
 
-    if (!title) errors.push({ field: 'title', message: 'title is required' })
-    if (!author) errors.push({ field: 'author', message: 'author is required' })
-    if (price === undefined) errors.push({ field: 'price', message: 'price is required' })
-    if (price < 0) errors.push({ field: 'price', message: 'price must be positive' })
-
-    if (errors.length > 0) {
-        return next(new AppError(422, ErrorCodes.VALIDATION_ERROR,
-            'Request validation failed', errors))
+    const book = {
+        id: nextId++,
+        ...req.body
     }
 
-    const book = { id: nextId++, title, author, price, stock: stock || 0 }
     books.push(book)
     res.status(201).json({ data: book })
 })
-router.patch('/:id', (req, res, next) => {
-    const book = books.find(b => b.id === parseInt(req.params.id))
-    if (!book) {
-        return next(new AppError(404, ErrorCodes.NOT_FOUND,
-            `Book with id ${req.params.id} not found`))
-    }
+router.patch(
+    '/:id',
 
-    const { title, author, price, stock } = req.body
+    validateParams(IdSchema),
 
-    if (price !== undefined && price < 0) {
-        return next(new AppError(422, ErrorCodes.VALIDATION_ERROR,
-            'Request validation failed',
-            [{ field: 'price', message: 'price must be positive' }]))
-    }
+    validate(UpdateBookSchema),
 
-    // only update fields that were sent
-    if (title !== undefined) book.title = title
-    if (author !== undefined) book.author = author
-    if (price !== undefined) book.price = price
-    if (stock !== undefined) book.stock = stock
+    (req, res, next) => {
 
-    res.json({ data: book })
-})
+        const book = books.find(
+            b => b.id === req.params.id
+        )
+
+        if (!book) {
+            return next(
+                new AppError(
+                    404,
+                    ErrorCodes.NOT_FOUND,
+                    `Book with id ${req.params.id} not found`
+                )
+            )
+        }
+
+        Object.assign(book, req.body)
+
+        res.json({
+            data: book
+        })
+    })
 
 // DELETE /v1/books/:id
-router.delete('/:id', (req, res, next) => {
-    const index = books.findIndex(b => b.id === parseInt(req.params.id))
+router.delete('/:id', validateParams(IdSchema), (req, res, next) => {
+    const index = books.findIndex(b => b.id === req.params.id)
     if (index === -1) {
         return next(new AppError(404, ErrorCodes.NOT_FOUND,
             `Book with id ${req.params.id} not found`))
