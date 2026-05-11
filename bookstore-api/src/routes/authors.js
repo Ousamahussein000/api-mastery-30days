@@ -1,6 +1,8 @@
 const express = require('express')
 const router = express.Router()
 const { AppError, ErrorCodes } = require('../errors')
+const { validate, validateParams } = require('../middleware/validation')
+const { z } = require('zod')
 
 let authors = [
     { id: 1, name: 'David Thomas', nationality: 'British', bio: 'Co-author of The Pragmatic Programmer' },
@@ -8,6 +10,16 @@ let authors = [
     { id: 3, name: 'Kyle Simpson', nationality: 'American', bio: 'Author of the You Don\'t Know JS series' },
 ]
 let nextId = 4
+const CreateAuthorSchema = z.object({
+    name: z.string().min(1, 'name is required').max(55, 'name must be less than 55 characters'),
+    nationality: z.string().min(1, 'nationality is required').max(100, 'nationality must be less than 100 characters'),
+    bio: z.string().max(255, 'bio must be less than 255 characters').optional()
+})
+const UpdateAuthorSchema = CreateAuthorSchema.partial()
+
+const IdSchema = z.object({
+    id: z.coerce.number().int().positive()
+})
 
 
 router.get('/', (req, res) => {
@@ -39,40 +51,30 @@ router.get('/', (req, res) => {
 
     })
 })
-router.get("/:id", (req, res, next) => {
-    const author = authors.find(author => author.id === parseInt(req.params.id))
+router.get("/:id", validateParams(IdSchema), (req, res, next) => {
+    const author = authors.find(author => author.id === (req.params.id))
     if (!author) {
         return next(new AppError(404, ErrorCodes.NOT_FOUND, "no author with this id"))
     }
     res.status(200).json({ data: author })
 })
-router.post("/", (req, res, next) => {
+router.post("/", validate(CreateAuthorSchema), (req, res, next) => {
     const { id, name, nationality, bio } = req.body
-    const errors = []
-    if (!name) errors.push("write the name")
-    if (!nationality) errors.push("write the nationality")
-    if (!bio) errors.push("write the bio")
 
-    if (errors.length > 0) {
-        return next(new AppError(422, ErrorCodes.VALIDATION_ERROR, "fill in the required fields"))
-    }
     const author = { id: nextId++, name, nationality, bio }
     authors.push(author)
     res.status(201).json({ data: author })
 })
-router.patch("/:id", (req, res, next) => {
-    const author = authors.find(author => author.id === parseInt(req.params.id))
+router.patch("/:id", validateParams(IdSchema), validate(UpdateAuthorSchema), (req, res, next) => {
+    const author = authors.find(author => author.id === (req.params.id))
     if (!author) {
         return next(new AppError(404, ErrorCodes.NOT_FOUND, "no author with this id"))
     }
-    const { name, nationality, bio } = req.body
-    if (name) author.name = name
-    if (nationality) author.nationality = nationality
-    if (bio) author.bio = bio
+    Object.assign(author, req.body)
     res.status(200).json({ data: author })
 })
-router.delete("/:id", (req, res, next) => {
-    const authorIndex = authors.findIndex(author => author.id === parseInt(req.params.id))
+router.delete("/:id", validateParams(IdSchema), (req, res, next) => {
+    const authorIndex = authors.findIndex(author => author.id === (req.params.id))
     if (authorIndex === -1) {
         return next(new AppError(404, ErrorCodes.NOT_FOUND, "no author with this id"))
     }
