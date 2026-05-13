@@ -15,7 +15,8 @@ app.use(logger)           // log every request
 // --- Routes ---
 
 app.use('/v1/auth', authRouter)
-
+app.use('/v1/books', require('./src/routes/books'))
+app.use('/v1/authors', require('./src/routes/authors'))
 
 // --- 404 handler — must be after all routes ---
 app.get('/', (req, res) => {
