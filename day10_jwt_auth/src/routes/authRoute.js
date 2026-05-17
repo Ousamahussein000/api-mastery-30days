@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const { z } = require("zod");
+const { z, email } = require("zod");
 const { AppError, ErrorCodes } = require("../errors");
 const { validate, validateParams } = require("../middleware/validation");
 const jwt = require("jsonwebtoken");
@@ -8,14 +8,11 @@ const dotenv = require("dotenv")
 dotenv.config()
 const authenticate = require("../middleware/authmiddleware")
 const authorize = require("../middleware/authorizationMiddleware")
-const users = [
-    { id: 1, username: "issaelkabisa", password: "1234567", role: "admin" },
-    { id: 2, username: "rafic", password: "password", role: "user" },
-    { id: 3, username: "oussama", password: "123456", role: "user" }
-];
+const prisma = require("../prisma")
 
 const usersSchema = z.object({
-    username: z.string().min(1, 'username is required').max(55, 'username must be less than 55 characters'),
+    fullname: z.string().min(1, 'fullname is required').max(70, 'fullname must be less than 70 characters'),
+    email: z.string().email('Invalid email address'),
     password: z.string().min(6, 'password is required'),
     role: z.enum(['admin', 'user']).default('user')
 })
@@ -23,10 +20,12 @@ const IdSchema = z.object({
     id: z.coerce.number().int().positive()
 })
 
-router.post('/', validate(usersSchema), (req, res, next) => {
+router.post('/', validate(usersSchema), async (req, res, next) => {
 
-    const { username, password, role } = req.body
-    const user = users.find(u => u.username === username && u.password === password)
+    const { fullname, email, password, role } = req.body
+    const user = await prisma.user.findUnique({
+        where: { email }
+    })
     if (!user) {
         return next(new AppError(401, ErrorCodes.UNAUTHORIZED, "Invalid credentials"))
     }
@@ -38,9 +37,11 @@ router.post('/', validate(usersSchema), (req, res, next) => {
     res.json({ token })
 })
 
-router.get('/me', authenticate, (req, res) => {
-    const user = users.find(u => u.id === req.user.id)
-    res.json({ id: user.id, username: user.username, role: user.role })
+router.get('/me', authenticate, async (req, res) => {
+    const user = await prisma.user.findUnique({
+        where: { id: req.user.userID }
+    })
+    res.json({ id: user.id, fullname: user.fullname, email: user.email, role: user.role })
 })
 
 module.exports = router

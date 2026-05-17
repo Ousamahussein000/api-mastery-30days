@@ -5,13 +5,9 @@ const { validate, validateParams } = require('../middleware/validation')
 const authenticate = require('../middleware/authmiddleware')
 const authorize = require('../middleware/authorizationMiddleware')
 const { z } = require('zod')
+const prisma = require('../prisma')
 
-let authors = [
-    { id: 1, name: 'David Thomas', nationality: 'British', bio: 'Co-author of The Pragmatic Programmer' },
-    { id: 2, name: 'Robert Martin', nationality: 'American', bio: 'Author of Clean Code and Clean Architecture' },
-    { id: 3, name: 'Kyle Simpson', nationality: 'American', bio: 'Author of the You Don\'t Know JS series' },
-]
-let nextId = 4
+
 const CreateAuthorSchema = z.object({
     name: z.string().min(1, 'name is required').max(55, 'name must be less than 55 characters'),
     nationality: z.string().min(1, 'nationality is required').max(100, 'nationality must be less than 100 characters'),
@@ -53,36 +49,62 @@ router.get('/', authenticate, (req, res) => {
 
     })
 })
-router.get("/:id", authenticate, validateParams(IdSchema), (req, res, next) => {
-    const author = authors.find(author => author.id === (req.params.id))
+router.get("/:id", authenticate, validateParams(IdSchema), async (req, res, next) => {
+    const author = await prisma.author.findUnique({
+        where: { id: req.params.id }
+    })
     if (!author) {
         return next(new AppError(404, ErrorCodes.NOT_FOUND, "no author with this id"))
     }
     res.status(200).json({ data: author })
 })
-router.post("/", authenticate, authorize('admin'), validate(CreateAuthorSchema), (req, res, next) => {
+router.post("/", authenticate, authorize('admin'), validate(CreateAuthorSchema), async (req, res, next) => {
     const { id, name, nationality, bio } = req.body
 
-    const author = { id: nextId++, name, nationality, bio }
-    authors.push(author)
+    const author = await prisma.author.create({
+        data: {
+            name,
+            nationality,
+            bio
+        }
+    })
     res.status(201).json({ data: author })
 })
-router.patch("/:id", authenticate, authorize('admin'), validateParams(IdSchema), validate(UpdateAuthorSchema), (req, res, next) => {
-    const author = authors.find(author => author.id === (req.params.id))
+router.patch("/:id", authenticate, authorize('admin'), validateParams(IdSchema), validate(UpdateAuthorSchema), async (req, res, next) => {
+    const author = await prisma.author.findUnique({
+        where: { id: req.params.id }
+    })
     if (!author) {
         return next(new AppError(404, ErrorCodes.NOT_FOUND, "no author with this id"))
     }
-    Object.assign(author, req.body)
-    res.status(200).json({ data: author })
+    const updatedAuthor = await prisma.author.update({
+        where: { id: req.params.id },
+        data: req.body
+    })
+    res.status(200).json({ data: updatedAuthor })
 })
-router.delete("/:id", authenticate, authorize('admin'), validateParams(IdSchema), (req, res, next) => {
-    const authorIndex = authors.findIndex(author => author.id === (req.params.id))
-    if (authorIndex === -1) {
+router.delete("/:id", authenticate, authorize('admin'), validateParams(IdSchema), async (req, res, next) => {
+    const author = await prisma.author.findUnique({
+        where: { id: req.params.id }
+    })
+    if (!author) {
         return next(new AppError(404, ErrorCodes.NOT_FOUND, "no author with this id"))
     }
-    authors.splice(authorIndex, 1)
+    const bookCount = await prisma.book.count({
+        where: { authorId: req.params.id }
+    })
+
+    if (bookCount > 0) {
+        return next(new AppError(409, ErrorCodes.CONFLICT,
+            `Cannot delete author — they have ${bookCount} book(s) in the library. Delete or reassign the books first.`
+        ))
+    }
+    await prisma.author.delete({
+        where: { id: req.params.id }
+    })
     res.status(204).send()
 })
+
 
 module.exports = router
 
