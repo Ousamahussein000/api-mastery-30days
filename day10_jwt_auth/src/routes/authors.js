@@ -6,6 +6,7 @@ const authenticate = require('../middleware/authmiddleware')
 const authorize = require('../middleware/authorizationMiddleware')
 const { z } = require('zod')
 const prisma = require('../prisma')
+const asyncHandler = require('../middleware/asyncHandler')
 
 
 const CreateAuthorSchema = z.object({
@@ -49,7 +50,7 @@ router.get('/', authenticate, (req, res) => {
 
     })
 })
-router.get("/:id", authenticate, validateParams(IdSchema), async (req, res, next) => {
+router.get("/:id", authenticate, validateParams(IdSchema), asyncHandler(async (req, res, next) => {
     const author = await prisma.author.findUnique({
         where: { id: req.params.id }
     })
@@ -57,8 +58,8 @@ router.get("/:id", authenticate, validateParams(IdSchema), async (req, res, next
         return next(new AppError(404, ErrorCodes.NOT_FOUND, "no author with this id"))
     }
     res.status(200).json({ data: author })
-})
-router.post("/", authenticate, authorize('admin'), validate(CreateAuthorSchema), async (req, res, next) => {
+}))
+router.post("/", authenticate, authorize('admin'), validate(CreateAuthorSchema), asyncHandler(async (req, res, next) => {
     const { id, name, nationality, bio } = req.body
 
     const author = await prisma.author.create({
@@ -69,8 +70,8 @@ router.post("/", authenticate, authorize('admin'), validate(CreateAuthorSchema),
         }
     })
     res.status(201).json({ data: author })
-})
-router.patch("/:id", authenticate, authorize('admin'), validateParams(IdSchema), validate(UpdateAuthorSchema), async (req, res, next) => {
+}))
+router.patch("/:id", authenticate, authorize('admin'), validateParams(IdSchema), validate(UpdateAuthorSchema), asyncHandler(async (req, res, next) => {
     const author = await prisma.author.findUnique({
         where: { id: req.params.id }
     })
@@ -82,8 +83,8 @@ router.patch("/:id", authenticate, authorize('admin'), validateParams(IdSchema),
         data: req.body
     })
     res.status(200).json({ data: updatedAuthor })
-})
-router.delete("/:id", authenticate, authorize('admin'), validateParams(IdSchema), async (req, res, next) => {
+}))
+router.delete("/:id", authenticate, authorize('admin'), validateParams(IdSchema), asyncHandler(async (req, res, next) => {
     const author = await prisma.author.findUnique({
         where: { id: req.params.id }
     })
@@ -103,7 +104,7 @@ router.delete("/:id", authenticate, authorize('admin'), validateParams(IdSchema)
         where: { id: req.params.id }
     })
     res.status(204).send()
-})
+}))
 
 
 module.exports = router

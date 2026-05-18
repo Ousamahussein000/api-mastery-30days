@@ -5,7 +5,7 @@ const authRouter = require('./src/routes/authRoute')
 const dotenv = require('dotenv')
 dotenv.config()
 const { ErrorCodes, AppError } = require('./src/errors')
-
+const { PrismaClientKnownRequestError } = require('@prisma/client/runtime/library')
 const app = express()
 
 // --- Global middleware ---
@@ -30,6 +30,26 @@ app.use(notFound)
 
 // --- Global error handler — must be last ---
 app.use((err, req, res, next) => {
+    if (err instanceof PrismaClientKnownRequestError) {
+        if (err.code === 'P2025') {
+            return res.status(404).json({
+                status: 404,
+                code: 'NOT_FOUND',
+                message: 'Record not found',
+                timestamp: new Date().toISOString(),
+                path: req.path
+            })
+        }
+        if (err.code === 'P2002') {
+            return res.status(409).json({
+                status: 409,
+                code: 'CONFLICT',
+                message: 'A record with this value already exists',
+                timestamp: new Date().toISOString(),
+                path: req.path
+            })
+        }
+    }
     console.log('ERROR HANDLER HIT:', err)
     const status = err.status || 500
     const code = err.code || ErrorCodes.INTERNAL_ERROR
@@ -49,6 +69,15 @@ app.use((err, req, res, next) => {
     }
 
     res.status(status).json(response)
+})
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Rejection:', reason)
+    // in production: log to monitoring service, then gracefully shut down
+})
+
+process.on('uncaughtException', (err) => {
+    console.error('Uncaught Exception:', err)
+    process.exit(1) // always exit on uncaught exception — process is in unknown state
 })
 
 const PORT = process.env.PORT || 3000

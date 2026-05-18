@@ -6,7 +6,7 @@ const { z } = require('zod')
 const authenticate = require('../middleware/authmiddleware')
 const authorize = require('../middleware/authorizationMiddleware')
 const prisma = require('../prisma')
-
+const asyncHandler = require('../middleware/asyncHandler')
 
 
 const CreateBookSchema = z.object({
@@ -22,20 +22,20 @@ const IdSchema = z.object({
     id: z.coerce.number().int().positive()
 })
 
-router.get('/', async (req, res, next) => {
+router.get('/', asyncHandler(async (req, res, next) => {
     try {
         const books = await prisma.Book.findMany()
         res.json({ data: books })
     } catch (err) {
         next(err)
     }
-})
+}))
 // GET /v1/books/:id
-router.get('/:id', authenticate, validateParams(IdSchema), async (req, res, next) => {
+router.get('/:id', authenticate, validateParams(IdSchema), asyncHandler(async (req, res, next) => {
     const book = await prisma.book.findUnique({
         where: { id: req.params.id },
         include: {
-            Author: true
+            author: true
         }
     })
     if (!book) {
@@ -43,10 +43,10 @@ router.get('/:id', authenticate, validateParams(IdSchema), async (req, res, next
             `Book with id ${req.params.id} not found`))
     }
     res.json({ data: book })
-})
+}))
 
 // POST /v1/books
-router.post('/', authenticate, authorize('admin'), validate(CreateBookSchema), async (req, res, next) => {
+router.post('/', authenticate, authorize('admin'), validate(CreateBookSchema), asyncHandler(async (req, res, next) => {
     console.log(typeof req.body.title, req.body)
     console.log('req.user:', req.user)
     const { title, price, stock, authorId } = req.body
@@ -68,9 +68,9 @@ router.post('/', authenticate, authorize('admin'), validate(CreateBookSchema), a
         }
     })
     res.status(201).json({ data: book })
-})
+}))
 router.patch('/:id', authenticate, authorize('admin'), validateParams(IdSchema), validate(UpdateBookSchema),
-    async (req, res, next) => {
+    asyncHandler(async (req, res, next) => {
 
         const book = await prisma.book.findUnique({
             where: { id: req.params.id }
@@ -94,10 +94,10 @@ router.patch('/:id', authenticate, authorize('admin'), validateParams(IdSchema),
         res.json({
             data: updatedBook
         })
-    })
+    }))
 
 // DELETE /v1/books/:id
-router.delete('/:id', authenticate, authorize('admin'), validateParams(IdSchema), async (req, res, next) => {
+router.delete('/:id', authenticate, authorize('admin'), validateParams(IdSchema), asyncHandler(async (req, res, next) => {
     const book = await prisma.book.findUnique({
         where: { id: req.params.id }
     })
@@ -111,6 +111,6 @@ router.delete('/:id', authenticate, authorize('admin'), validateParams(IdSchema)
         where: { id: req.params.id }
     })
     res.status(204).send()
-})
+}))
 
 module.exports = router
