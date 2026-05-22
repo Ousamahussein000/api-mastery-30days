@@ -1,4 +1,4 @@
-const jwt = require('jsonwebtoken')
+
 const express = require('express')
 const router = express.Router()
 const { z } = require('zod')
@@ -24,9 +24,37 @@ router.post('/', authenticate, authorize('admin'), asyncHandler(async (req, res,
 }))
 
 
-router.get('/', asyncHandler(async (req, res, next) => {
-    const authors = await prisma.author.findMany()
-    res.json(authors)
+router.get('/', asyncHandler(async (req, res) => {
+    const page = parseInt(req.query.page) || 1
+    const limit = Math.min(parseInt(req.query.limit) || 10, 100)
+    const skip = (page - 1) * limit
+
+    const where = {}
+    if (req.query.search) {
+        where.name = { contains: req.query.search, mode: 'insensitive' }
+    }
+
+    const [authors, total] = await Promise.all([
+        prisma.author.findMany({
+            where,
+            skip,
+            take: limit,
+            include: { books: true }
+        }),
+        prisma.author.count({ where })
+    ])
+
+    res.json({
+        data: authors,
+        pagination: {
+            page,
+            limit,
+            total,
+            total_pages: Math.ceil(total / limit),
+            has_next: page * limit < total,
+            has_prev: page > 1
+        }
+    })
 }))
 
 router.get('/:id', validateParams(IdSchema), asyncHandler(async (req, res, next) => {
@@ -38,6 +66,15 @@ router.get('/:id', validateParams(IdSchema), asyncHandler(async (req, res, next)
     res.json(author)
 
 }))
+router.get('/:id/books', validateParams(IdSchema), asyncHandler(async (req, res, next) => {
+    const { id } = req.params
+    if (!await prisma.author.findUnique({ where: { id } })) {
+        throw new AppError(404, ErrorCodes.NOT_FOUND, 'Author not found')
+    }
+    const books = await prisma.book.findMany({ where: { authorId: id } })
+    res.json(books)
+}))
+
 router.patch('/:id', authenticate, authorize('admin'), validateParams(IdSchema), validate(updateAuthorSchema), asyncHandler(async (req, res, next) => {
     const { id } = req.params
     if (!await prisma.author.findUnique({ where: { id } })) {
