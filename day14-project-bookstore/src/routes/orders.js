@@ -37,7 +37,7 @@ router.post('/', authenticate, validate(OrderSchema), asyncHandler(async (req, r
         // 2. create order + items together
         const order = await tx.order.create({
             data: {
-                userId: req.user.userId,
+                userId: req.user.id,
                 totalPrice,
 
                 items: {
@@ -122,3 +122,5 @@ router.delete('/:id', authenticate, authorize('admin'), validateParams(IdSchema)
 
     res.status(204).send()
 }))
+
+module.exports = router

@@ -1,7 +1,7 @@
 const jwt = require('jsonwebtoken');
 const express = require('express');
 const router = express.Router();
-const zod = require('zod');
+const z = require('zod');
 const prisma = require('../prisma');
 const { AppError, ErrorCodes } = require('../errors');
 const { validate } = require('../middleware/validate');
@@ -9,11 +9,11 @@ const authenticate = require('../middleware/authenticate');
 const asyncHandler = require('../middleware/asyncHandler');
 const bcrypt = require('bcrypt');
 
-const loginSchema = zod.object({
+const loginSchema = z.object({
     email: z.string().email(),
     password: z.string().min(6)
 })
-const registerSchema = zod.object({
+const registerSchema = z.object({
     name: z.string().min(2),
     email: z.string().email(),
     password: z.string()
@@ -22,7 +22,7 @@ const registerSchema = zod.object({
         .regex(/[0-9]/, 'password must contain at least one number')
         .regex(/[^a-zA-Z0-9]/, 'password must contain at least one special character')
 })
-const UpdateProfileSchema = zod.object({
+const UpdateProfileSchema = z.object({
     name: z.string().min(2).optional(),
     email: z.string().email().optional(),
     password: z.string()
