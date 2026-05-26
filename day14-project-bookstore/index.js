@@ -4,7 +4,7 @@ const { ErrorCodes } = require('./src/errors')
 const { PrismaClientKnownRequestError } = require('@prisma/client/runtime/library')
 
 const app = express()
-
+const { globalLimiter } = require('./src/middleware/rateLimiter')
 // --- Process safety nets ---
 process.on('unhandledRejection', (reason) => {
     console.error('Unhandled Rejection:', reason)
@@ -17,11 +17,16 @@ process.on('uncaughtException', (err) => {
 // --- Global middleware ---
 app.use(express.json())
 app.use(require('./src/middleware/logger'))
-
+// index.js — apply global limiter to everything EXCEPT auth routes
+app.use((req, res, next) => {
+    if (req.path.startsWith('/v1/auth')) return next()
+    globalLimiter(req, res, next)
+})
 // --- Health check ---
 app.get('/', (req, res) => {
     res.json({ name: 'Bookstore API', version: 'v1', status: 'running' })
 })
+
 
 // --- Routes ---
 app.use('/v1/auth', require('./src/routes/auth'))

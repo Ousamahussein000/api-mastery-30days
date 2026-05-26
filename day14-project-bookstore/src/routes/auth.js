@@ -8,7 +8,7 @@ const { validate } = require('../middleware/validate');
 const authenticate = require('../middleware/authenticate');
 const asyncHandler = require('../middleware/asyncHandler');
 const bcrypt = require('bcrypt');
-
+const { authLimiter } = require('../middleware/rateLimiter')
 const loginSchema = z.object({
     email: z.string().email(),
     password: z.string().min(6)
@@ -33,7 +33,7 @@ const UpdateProfileSchema = z.object({
 })
 
 
-router.post('/register', validate(registerSchema), asyncHandler(async (req, res, next) => {
+router.post('/register', authLimiter, validate(registerSchema), asyncHandler(async (req, res, next) => {
     const { name, email, password } = req.body
     const existingUser = await prisma.user.findUnique({ where: { email } })
     if (existingUser) {
@@ -48,7 +48,7 @@ router.post('/register', validate(registerSchema), asyncHandler(async (req, res,
 }))
 
 
-router.post('/login', validate(loginSchema), asyncHandler(async (req, res, next) => {
+router.post('/login', authLimiter, validate(loginSchema), asyncHandler(async (req, res, next) => {
     const { email, password } = req.body
     const user = await prisma.user.findUnique({ where: { email } })
     if (!user) {
