@@ -32,7 +32,7 @@ const globalLimiter = rateLimit({
 
 // auth limiter — strict, protects against brute force on login/register
 const authLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
+    windowMs: 3 * 60 * 1000,
     max: 5,                    // only 5 attempts per 15 minutes
     standardHeaders: true,
     legacyHeaders: false,
