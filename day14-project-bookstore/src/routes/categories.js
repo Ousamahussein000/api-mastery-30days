@@ -8,6 +8,7 @@ const authenticate = require('../middleware/authenticate')
 const authorize = require('../middleware/authorize')
 const { validateParams, validate } = require('../middleware/validate')
 const asyncHandler = require('../middleware/asyncHandler')
+const { redis, getVersion, invalidate } = require('../cache')
 const categorySchema = z.object({
     name: z.string().min(2),
     section: z.string().min(1).max(100)
@@ -19,6 +20,14 @@ const IdSchema = z.object({
 
 })
 router.get('/', asyncHandler(async (req, res) => {
+    const version = await getVersion(`category`)
+    const cashkey = `category:${version}:${JSON.stringify(req.query)}`
+
+    const cached = await redis.get(cashkey)
+    if (cached) {
+        return res.json({ data: JSON.parse(cached), source: 'cache' })
+    }
+
     const where = {}
     if (req.query.section) {
         where.section = { equals: req.query.section, mode: 'insensitive' }
@@ -29,15 +38,21 @@ router.get('/', asyncHandler(async (req, res) => {
         include: { _count: { select: { books: true } } }  // how many books per category
     })
 
-    res.json({ data: categories })
+    await redis.set(cashkey, JSON.stringify(categories), 'EX', 60)
+    res.json({ data: categories, source: 'database' })
 }))
 router.post('/', authenticate, authorize('admin'), validate(categorySchema), asyncHandler(async (req, res, next) => {
     const { name, section } = req.body
     const category = await prisma.category.create({ data: { name, section } })
+    await invalidate('category')  // bumps version — all category:v* keys unreachable
     res.status(201).json(category)
 }))
 router.get('/:id', validateParams(IdSchema), asyncHandler(async (req, res, next) => {
     const { id } = req.params
+    const version = await getVersion(`category`)
+    const cacheKey = `category:${version}:${id}`
+    const cached = await redis.get(cacheKey)
+    if (cached) return res.json({ data: JSON.parse(cached), source: 'cache' })
     const category = await prisma.category.findUnique({
         where: { id },
         include: { books: true }
@@ -45,7 +60,8 @@ router.get('/:id', validateParams(IdSchema), asyncHandler(async (req, res, next)
     if (!category) {
         throw new AppError(404, ErrorCodes.NOT_FOUND, 'Category not found')
     }
-    res.json({ data: category })
+    await redis.set(cacheKey, JSON.stringify(category), 'EX', 120)
+    res.json({ data: category, source: 'database' })
 }))
 router.delete('/:id', authenticate, authorize('admin'), validateParams(IdSchema), asyncHandler(async (req, res, next) => {
     const { id } = req.params
@@ -59,6 +75,7 @@ router.delete('/:id', authenticate, authorize('admin'), validateParams(IdSchema)
             `Cannot delete category — it has ${bookCount} book(s) linked to it`)
     }
     await prisma.category.delete({ where: { id } })
+    await invalidate('category')  // bumps version — all category:v* keys unreachable
     res.status(204).send()
 }))
 router.patch('/:id', authenticate, authorize('admin'), validateParams(IdSchema), validate(updateCategorySchema), asyncHandler(async (req, res, next) => {
@@ -72,6 +89,7 @@ router.patch('/:id', authenticate, authorize('admin'), validateParams(IdSchema),
         where: { id },
         data: { name, section }
     })
+    await invalidate('category')  // bumps version — all category:v* keys unreachable
     res.json(updated)
 }))
 

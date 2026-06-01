@@ -8,7 +8,7 @@ const authenticate = require('../middleware/authenticate')
 const authorize = require('../middleware/authorize')
 const { validateParams, validate } = require('../middleware/validate')
 const asyncHandler = require('../middleware/asyncHandler')
-const redis = require('../cache')
+const { redis, getVersion, invalidate } = require('../cache')
 const bookSchema = z.object({
     title: z.string().min(2),
     authorId: z.number().int().positive(),
@@ -34,11 +34,12 @@ router.post('/', authenticate, authorize('admin'), validate(bookSchema), asyncHa
     })
     const keys = await redis.keys('books:*')
     if (keys.length) await redis.del(...keys)
+    await invalidate('books')  // bumps version — all book:v* and books:v* keys unreachable
     res.status(201).json(book)
 }))
 router.get('/', asyncHandler(async (req, res) => {
-
-    const cacheKey = `books:${JSON.stringify(req.query)}`
+    const version = await getVersion('books')
+    const cacheKey = `books:${version}:${JSON.stringify(req.query)}`
 
     const cached = await redis.get(cacheKey)
     if (cached) {
@@ -87,7 +88,8 @@ router.get('/', asyncHandler(async (req, res) => {
 }))
 router.get('/:id', validateParams(IdSchema), asyncHandler(async (req, res) => {
     const { id } = req.params
-    const cacheKey = `book:${id}`
+    const version = await getVersion('books')
+    const cacheKey = `book:${version}:${id}`
     const cached = await redis.get(cacheKey)
     if (cached) return res.json({ data: JSON.parse(cached), source: 'cache' })
     const book = await prisma.book.findUnique({
@@ -113,8 +115,9 @@ router.patch('/:id', authenticate, authorize('admin'), validateParams(IdSchema),
     })
     const keys = await redis.keys('books:*')
     if (keys.length) await redis.del(...keys)
-    await redis.del(`book:${id}`)
-    res.json(book)
+    await invalidate('books')  // bumps version — all book:v* and books:v* keys unreachable
+    res.json({ data: book })
+
 
 }))
 router.delete('/:id', authenticate, authorize('admin'), validateParams(IdSchema), asyncHandler(async (req, res) => {
@@ -125,7 +128,7 @@ router.delete('/:id', authenticate, authorize('admin'), validateParams(IdSchema)
     await prisma.book.delete({ where: { id } })
     const keys = await redis.keys('books:*')
     if (keys.length) await redis.del(...keys)
-    await redis.del(`book:${id}`)
+    await invalidate('books')  // bumps version — all book:v* and books:v* keys unreachable
     res.status(204).send()
 
 }))
