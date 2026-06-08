@@ -100,7 +100,7 @@ router.get('/:id', validateParams(IdSchema), asyncHandler(async (req, res) => {
         throw new AppError(404, ErrorCodes.NOT_FOUND, 'Book not found')
     }
     await redis.set(cacheKey, JSON.stringify(book), 'EX', 120)
-    res.json(book)
+    res.json({ data: book, source: 'database' })
 
 }))
 router.patch('/:id', authenticate, authorize('admin'), validateParams(IdSchema), validate(updateBookSchema), asyncHandler(async (req, res) => {
