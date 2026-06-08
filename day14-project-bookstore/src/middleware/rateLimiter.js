@@ -62,4 +62,22 @@ const publicLimiter = rateLimit({
     }
 })
 
-module.exports = { globalLimiter, authLimiter, publicLimiter }
+
+
+// dummy limiters for test environment — no Redis, no blocking
+const passThrough = (req, res, next) => next()
+
+if (process.env.NODE_ENV === 'test') {
+    module.exports = {
+        globalLimiter: passThrough,
+        authLimiter: passThrough,
+        publicLimiter: passThrough
+    }
+} else {
+    const redis = new Redis({ host: 'localhost', port: 6379 })
+    redis.on('connect', () => console.log('Redis connected'))
+    redis.on('error', (err) => console.error('Redis error:', err))
+
+    // ... rest of your limiters
+    module.exports = { globalLimiter, authLimiter, publicLimiter }
+}

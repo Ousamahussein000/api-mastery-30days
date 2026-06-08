@@ -35,7 +35,7 @@ router.post('/', authenticate, authorize('admin'), validate(bookSchema), asyncHa
     const keys = await redis.keys('books:*')
     if (keys.length) await redis.del(...keys)
     await invalidate('books')  // bumps version — all book:v* and books:v* keys unreachable
-    res.status(201).json(book)
+    res.status(201).json({ data: book })
 }))
 router.get('/', asyncHandler(async (req, res) => {
     const version = await getVersion('books')
