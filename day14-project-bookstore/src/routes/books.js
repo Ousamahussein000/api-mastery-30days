@@ -129,7 +129,7 @@ router.delete('/:id', authenticate, authorize('admin'), validateParams(IdSchema)
     const keys = await redis.keys('books:*')
     if (keys.length) await redis.del(...keys)
     await invalidate('books')  // bumps version — all book:v* and books:v* keys unreachable
-    res.status(204).send()
+    res.status(200).send()
 
 }))
 module.exports = router
